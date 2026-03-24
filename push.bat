@@ -3,27 +3,18 @@ cd /d C:\Users\Asus\Documents\Antigravity_Portfolio_Example\temp-app
 
 echo.
 echo =========================================================
-echo          UPLOADING PORTFOLIO TO GITHUB...
+echo     PUSHING UPDATE TO TRIGGER VERCEL REBUILD...
 echo =========================================================
 echo.
-
-git remote remove origin 2>nul
-git remote add origin https://github.com/cre8ify777-commits/Portfolio-.git
 
 git add .
-git commit -m "Initial launch of Antigravity Portfolio" --allow-empty
-
-echo.
-echo A GitHub sign-in window will appear now.
-echo Please click "Sign in with your browser" and authorize.
-echo.
-
-git push -u origin main
+git commit -m "Add vercel.json config for proper deployment"
+git push origin main
 
 echo.
 echo =========================================================
-echo   DONE! Your portfolio is now live on GitHub!
-echo   You can close this window.
+echo   DONE! Vercel will now auto-rebuild your site.
+echo   Wait 1-2 minutes, then refresh your Vercel URL.
 echo =========================================================
 echo.
 pause
