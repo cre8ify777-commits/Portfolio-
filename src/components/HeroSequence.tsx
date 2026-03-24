@@ -21,46 +21,81 @@ export default function HeroSequence({ children }: { children?: React.ReactNode 
 
   const imagesRef = useRef<(HTMLImageElement | null)[]>([]);
 
-  // Preload frames
+  // Progressive frame loading - load first frame immediately, then batch load rest
   useEffect(() => {
-    const images: (HTMLImageElement | null)[] = [];
-    let loadedCount = 0;
-
-    for (let i = 0; i < FRAME_COUNT; i++) {
-      const img = new Image();
-      const num = i.toString().padStart(3, '0');
-      img.src = `/hero-frames/frame_${num}_delay-0.055s.png`;
-      
-      img.onload = () => {
-        loadedCount++;
-        setImagesLoaded(loadedCount);
-        
-        if (i === 0 && canvasRef.current) {
-          const ctx = canvasRef.current.getContext('2d');
-          if (ctx) {
-            canvasRef.current.width = 1920;
-            canvasRef.current.height = 1080;
-            ctx.clearRect(0, 0, 1920, 1080);
-            ctx.drawImage(img, 0, 0, 1920, 1080);
-
-            // Cleanly mask the watermark logo
-            const gradient = ctx.createRadialGradient(1820, 1020, 0, 1820, 1020, 140);
-            gradient.addColorStop(0, 'rgba(15, 0, 0, 1)');
-            gradient.addColorStop(1, 'rgba(15, 0, 0, 0)');
-            ctx.fillStyle = gradient;
-            ctx.fillRect(1600, 800, 400, 300);
-          }
-        }
-      };
-      images.push(img);
-    }
+    const images: (HTMLImageElement | null)[] = new Array(FRAME_COUNT).fill(null);
     imagesRef.current = images;
+
+    const getFrameSrc = (i: number) => {
+      const num = i.toString().padStart(3, '0');
+      return `/hero-frames/frame_${num}_delay-0.055s.png`;
+    };
+
+    const drawFrame = (img: HTMLImageElement) => {
+      if (!canvasRef.current) return;
+      const ctx = canvasRef.current.getContext('2d');
+      if (!ctx) return;
+      canvasRef.current.width = 960;
+      canvasRef.current.height = 540;
+      ctx.drawImage(img, 0, 0, 960, 540);
+      // Mask watermark
+      const gradient = ctx.createRadialGradient(910, 510, 0, 910, 510, 70);
+      gradient.addColorStop(0, 'rgba(15, 0, 0, 1)');
+      gradient.addColorStop(1, 'rgba(15, 0, 0, 0)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(800, 400, 200, 150);
+    };
+
+    // Load first frame instantly for fast first paint
+    const first = new Image();
+    first.src = getFrameSrc(0);
+    first.onload = () => {
+      images[0] = first;
+      setImagesLoaded(1);
+      drawFrame(first);
+    };
+
+    // Then progressively batch-load in groups of 8
+    const BATCH_SIZE = 8;
+    let currentBatch = 0;
+
+    const loadBatch = () => {
+      const start = currentBatch * BATCH_SIZE + 1; // skip frame 0
+      const end = Math.min(start + BATCH_SIZE, FRAME_COUNT);
+      if (start >= FRAME_COUNT) return;
+
+      let batchLoaded = 0;
+      for (let i = start; i < end; i++) {
+        const img = new Image();
+        img.src = getFrameSrc(i);
+        img.onload = () => {
+          images[i] = img;
+          batchLoaded++;
+          setImagesLoaded(prev => prev + 1);
+          if (batchLoaded >= end - start) {
+            currentBatch++;
+            // Small delay between batches to avoid network congestion
+            setTimeout(loadBatch, 50);
+          }
+        };
+        img.onerror = () => {
+          batchLoaded++;
+          if (batchLoaded >= end - start) {
+            currentBatch++;
+            setTimeout(loadBatch, 50);
+          }
+        };
+      }
+    };
+
+    // Start batch loading after a brief delay to prioritize first paint
+    setTimeout(loadBatch, 200);
   }, []);
 
   useEffect(() => {
     if (canvasRef.current) {
-      canvasRef.current.width = 1920;
-      canvasRef.current.height = 1080;
+      canvasRef.current.width = 960;
+      canvasRef.current.height = 540;
     }
   }, []);
 
@@ -73,15 +108,15 @@ export default function HeroSequence({ children }: { children?: React.ReactNode 
     const img = imagesRef.current[currentFrame];
 
     if (img && img.complete) {
-      ctx.clearRect(0, 0, 1920, 1080);
-      ctx.drawImage(img, 0, 0, 1920, 1080);
+      ctx.clearRect(0, 0, 960, 540);
+      ctx.drawImage(img, 0, 0, 960, 540);
 
-      // Cleanly mask the watermark logo
-      const gradient = ctx.createRadialGradient(1820, 1020, 0, 1820, 1020, 140);
+      // Mask watermark
+      const gradient = ctx.createRadialGradient(910, 510, 0, 910, 510, 70);
       gradient.addColorStop(0, 'rgba(15, 0, 0, 1)');
       gradient.addColorStop(1, 'rgba(15, 0, 0, 0)');
       ctx.fillStyle = gradient;
-      ctx.fillRect(1600, 800, 400, 300);
+      ctx.fillRect(800, 400, 200, 150);
     }
   });
 
@@ -104,9 +139,14 @@ export default function HeroSequence({ children }: { children?: React.ReactNode 
         
         <div className="absolute inset-0 bg-black/50 z-10 pointer-events-none mix-blend-multiply" />
 
-        {imagesLoaded < Math.min(20, FRAME_COUNT) && (
-          <div className="absolute bottom-10 z-50 text-neutral-400 font-mono text-sm tracking-widest animate-pulse">
-            LOADING ASSETS...
+        {imagesLoaded < FRAME_COUNT && imagesLoaded > 0 && (
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-50 w-32">
+            <div className="h-[2px] bg-neutral-800 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-neutral-500 transition-all duration-300 ease-out rounded-full"
+                style={{ width: `${Math.round((imagesLoaded / FRAME_COUNT) * 100)}%` }}
+              />
+            </div>
           </div>
         )}
 
