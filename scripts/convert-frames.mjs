@@ -2,18 +2,19 @@ import sharp from 'sharp';
 import fs from 'fs';
 import path from 'path';
 
-const INPUT_DIR = path.join(process.cwd(), 'public', 'sequence');
+// Use the original high-quality frames from "New Hero Section Vid"
+const INPUT_DIR = path.resolve('C:\\Users\\Asus\\Documents\\Antigravity_Portfolio_Example\\New Hero Section Vid');
 const OUTPUT_DIR = path.join(process.cwd(), 'public', 'hero-webp');
 
-// We skip every other frame: 144 → 72 frames
 const SOURCE_FRAME_COUNT = 144;
-const SKIP = 2; // take every 2nd frame
+const SKIP = 2; // take every 2nd frame: 144 → 72
 
 async function convertFrames() {
-  // Create output directory
-  if (!fs.existsSync(OUTPUT_DIR)) {
-    fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+  // Clear and recreate output directory
+  if (fs.existsSync(OUTPUT_DIR)) {
+    fs.rmSync(OUTPUT_DIR, { recursive: true });
   }
+  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 
   let outputIndex = 0;
   let totalInputSize = 0;
@@ -24,7 +25,7 @@ async function convertFrames() {
     const inputFile = path.join(INPUT_DIR, `frame_${num}_delay-0.055s.png`);
     
     if (!fs.existsSync(inputFile)) {
-      console.warn(`⚠ Missing: ${inputFile}`);
+      console.warn(`Warning: Missing ${inputFile}`);
       continue;
     }
 
@@ -35,8 +36,8 @@ async function convertFrames() {
     totalInputSize += inputStats.size;
 
     await sharp(inputFile)
-      .resize(1280, 720, { fit: 'cover' }) // Resize to 720p (crisp enough for full-screen CSS stretch)
-      .webp({ quality: 82, effort: 4 })     // High quality WebP, good compression
+      .resize(1280, 720, { fit: 'cover' })
+      .webp({ quality: 82, effort: 4 })
       .toFile(outputFile);
 
     const outputStats = fs.statSync(outputFile);
@@ -47,8 +48,8 @@ async function convertFrames() {
   }
 
   console.log('\n');
-  console.log(`✅ Done! Converted ${outputIndex} frames`);
-  console.log(`   Input:  ${(totalInputSize / 1024 / 1024).toFixed(2)} MB (${SOURCE_FRAME_COUNT} PNGs)`);
+  console.log(`Done! Converted ${outputIndex} frames from original "New Hero Section Vid"`);
+  console.log(`   Input:  ${(totalInputSize / 1024 / 1024).toFixed(2)} MB (${SOURCE_FRAME_COUNT} original PNGs)`);
   console.log(`   Output: ${(totalOutputSize / 1024 / 1024).toFixed(2)} MB (${outputIndex} WebPs)`);
   console.log(`   Reduction: ${(100 - (totalOutputSize / totalInputSize) * 100).toFixed(1)}%`);
 }
