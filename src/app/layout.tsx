@@ -4,7 +4,12 @@ import './globals.css';
 import CustomCursor from '@/components/CustomCursor';
 import Header from '@/components/Header';
 
-const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
+  display: 'swap',       // Prevents Flash of Invisible Text (FOIT)
+  preload: true,          // Ensures font is preloaded in <head>
+});
 
 export const metadata: Metadata = {
   title: 'Aditya Kanchan | AI & Sales Professional',

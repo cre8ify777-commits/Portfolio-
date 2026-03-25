@@ -1,31 +1,44 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { motion, useSpring, useMotionValue } from 'framer-motion';
 
 export default function CustomCursor() {
-  const [isVisible, setIsVisible] = useState(false);
-  
+  const isVisibleRef = useRef(false);
+  const cursorRef = useRef<HTMLDivElement>(null);
+
   // Mouse coordinates
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
 
-  // Tightened spring physics for instant, highly responsive cursor tracking
+  // Tight spring physics for instant response
   const springConfig = { damping: 40, stiffness: 1500, mass: 0.1 };
   const cursorX = useSpring(mouseX, springConfig);
   const cursorY = useSpring(mouseY, springConfig);
 
   useEffect(() => {
+    const el = cursorRef.current;
+    if (!el) return;
+
     const handleMouseMove = (e: MouseEvent) => {
       mouseX.set(e.clientX);
       mouseY.set(e.clientY);
-      if (!isVisible) setIsVisible(true);
+      if (!isVisibleRef.current) {
+        isVisibleRef.current = true;
+        el.style.opacity = '1';
+      }
     };
 
-    const handleMouseLeave = () => setIsVisible(false);
-    const handleMouseEnter = () => setIsVisible(true);
+    const handleMouseLeave = () => {
+      isVisibleRef.current = false;
+      el.style.opacity = '0';
+    };
+    const handleMouseEnter = () => {
+      isVisibleRef.current = true;
+      el.style.opacity = '1';
+    };
 
-    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
     window.addEventListener('mouseleave', handleMouseLeave);
     window.addEventListener('mouseenter', handleMouseEnter);
 
@@ -34,16 +47,17 @@ export default function CustomCursor() {
       window.removeEventListener('mouseleave', handleMouseLeave);
       window.removeEventListener('mouseenter', handleMouseEnter);
     };
-  }, [mouseX, mouseY, isVisible]);
+  }, [mouseX, mouseY]);
 
   return (
     <motion.div
+      ref={cursorRef}
       style={{
         left: cursorX,
         top: cursorY,
         translateX: '-50%',
         translateY: '-50%',
-        opacity: isVisible ? 1 : 0,
+        opacity: 0,
       }}
       className="fixed pointer-events-none z-[9999] w-10 h-10 rounded-full border border-white/30 bg-white/10 backdrop-blur-md shadow-xl transition-opacity duration-300 flex items-center justify-center overflow-hidden"
     >

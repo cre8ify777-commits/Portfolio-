@@ -3,17 +3,17 @@ cd /d C:\Users\Asus\Documents\Antigravity_Portfolio_Example\temp-app
 
 echo.
 echo =========================================================
-echo   PUSHING PERFORMANCE UPDATE TO VERCEL...
+echo   PUSHING ALL PERFORMANCE OPTIMIZATIONS...
 echo =========================================================
 echo.
 
 git add .
-git commit -m "Optimize hero loading: progressive batch loading, halved canvas resolution"
+git commit -m "Performance: 94%% image reduction, code splitting, caching, font optimization"
 git push origin main
 
 echo.
 echo =========================================================
-echo   DONE! Vercel will rebuild in about 1-2 minutes.
+echo   DONE! Vercel will auto-rebuild with optimizations.
 echo =========================================================
 echo.
 pause

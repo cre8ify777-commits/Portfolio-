@@ -1,14 +1,16 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { motion, useScroll, useTransform, useMotionValueEvent } from 'framer-motion';
 
-const FRAME_COUNT = 144;
+const FRAME_COUNT = 72;
 
 export default function HeroSequence({ children }: { children?: React.ReactNode }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [imagesLoaded, setImagesLoaded] = useState(0);
+  const imagesRef = useRef<(HTMLImageElement | null)[]>([]);
+  const loadedCountRef = useRef(0);
+  const progressRef = useRef<HTMLDivElement>(null);
 
   // Track scroll progress within this entire container
   const { scrollYProgress } = useScroll({
@@ -19,48 +21,70 @@ export default function HeroSequence({ children }: { children?: React.ReactNode 
   // Map progress to frame index
   const frameIndex = useTransform(scrollYProgress, [0, 1], [0, FRAME_COUNT - 1]);
 
-  const imagesRef = useRef<(HTMLImageElement | null)[]>([]);
+  // Cached watermark mask (created once, reused every frame)
+  const maskRef = useRef<HTMLCanvasElement | null>(null);
 
-  // Progressive frame loading - load first frame immediately, then batch load rest
+  const getMask = useCallback(() => {
+    if (maskRef.current) return maskRef.current;
+    const mask = document.createElement('canvas');
+    mask.width = 1280;
+    mask.height = 720;
+    const mctx = mask.getContext('2d')!;
+    const gradient = mctx.createRadialGradient(1220, 680, 0, 1220, 680, 100);
+    gradient.addColorStop(0, 'rgba(15, 0, 0, 1)');
+    gradient.addColorStop(1, 'rgba(15, 0, 0, 0)');
+    mctx.fillStyle = gradient;
+    mctx.fillRect(1080, 580, 250, 180);
+    maskRef.current = mask;
+    return mask;
+  }, []);
+
+  const drawFrame = useCallback((img: HTMLImageElement) => {
+    if (!canvasRef.current) return;
+    const ctx = canvasRef.current.getContext('2d');
+    if (!ctx) return;
+    ctx.drawImage(img, 0, 0, 1280, 720);
+    ctx.drawImage(getMask(), 0, 0);
+  }, [getMask]);
+
+  // Progressive frame loading
   useEffect(() => {
     const images: (HTMLImageElement | null)[] = new Array(FRAME_COUNT).fill(null);
     imagesRef.current = images;
 
-    const getFrameSrc = (i: number) => {
-      const num = i.toString().padStart(3, '0');
-      return `/hero-frames/frame_${num}_delay-0.055s.png`;
+    const getFrameSrc = (i: number) => `/hero-webp/frame_${i.toString().padStart(3, '0')}.webp`;
+
+    const updateProgress = () => {
+      if (progressRef.current) {
+        const pct = Math.round((loadedCountRef.current / FRAME_COUNT) * 100);
+        progressRef.current.style.width = `${pct}%`;
+        if (pct >= 100) {
+          progressRef.current.parentElement!.style.opacity = '0';
+        }
+      }
     };
 
-    const drawFrame = (img: HTMLImageElement) => {
-      if (!canvasRef.current) return;
-      const ctx = canvasRef.current.getContext('2d');
-      if (!ctx) return;
-      canvasRef.current.width = 960;
-      canvasRef.current.height = 540;
-      ctx.drawImage(img, 0, 0, 960, 540);
-      // Mask watermark
-      const gradient = ctx.createRadialGradient(910, 510, 0, 910, 510, 70);
-      gradient.addColorStop(0, 'rgba(15, 0, 0, 1)');
-      gradient.addColorStop(1, 'rgba(15, 0, 0, 0)');
-      ctx.fillStyle = gradient;
-      ctx.fillRect(800, 400, 200, 150);
-    };
-
-    // Load first frame instantly for fast first paint
+    // Load first frame immediately for instant first paint
     const first = new Image();
     first.src = getFrameSrc(0);
     first.onload = () => {
       images[0] = first;
-      setImagesLoaded(1);
+      loadedCountRef.current = 1;
+      if (canvasRef.current) {
+        canvasRef.current.width = 1280;
+        canvasRef.current.height = 720;
+        canvasRef.current.style.opacity = '1';
+      }
       drawFrame(first);
+      updateProgress();
     };
 
-    // Then progressively batch-load in groups of 8
-    const BATCH_SIZE = 8;
+    // Then progressively batch-load remaining frames
+    const BATCH_SIZE = 10;
     let currentBatch = 0;
 
     const loadBatch = () => {
-      const start = currentBatch * BATCH_SIZE + 1; // skip frame 0
+      const start = currentBatch * BATCH_SIZE + 1;
       const end = Math.min(start + BATCH_SIZE, FRAME_COUNT);
       if (start >= FRAME_COUNT) return;
 
@@ -70,32 +94,32 @@ export default function HeroSequence({ children }: { children?: React.ReactNode 
         img.src = getFrameSrc(i);
         img.onload = () => {
           images[i] = img;
+          loadedCountRef.current++;
+          updateProgress();
           batchLoaded++;
-          setImagesLoaded(prev => prev + 1);
           if (batchLoaded >= end - start) {
             currentBatch++;
-            // Small delay between batches to avoid network congestion
-            setTimeout(loadBatch, 50);
+            requestAnimationFrame(() => setTimeout(loadBatch, 30));
           }
         };
         img.onerror = () => {
           batchLoaded++;
           if (batchLoaded >= end - start) {
             currentBatch++;
-            setTimeout(loadBatch, 50);
+            requestAnimationFrame(() => setTimeout(loadBatch, 30));
           }
         };
       }
     };
 
-    // Start batch loading after a brief delay to prioritize first paint
-    setTimeout(loadBatch, 200);
-  }, []);
+    // Prioritize first paint, then start loading rest
+    setTimeout(loadBatch, 100);
+  }, [drawFrame]);
 
   useEffect(() => {
     if (canvasRef.current) {
-      canvasRef.current.width = 960;
-      canvasRef.current.height = 540;
+      canvasRef.current.width = 1280;
+      canvasRef.current.height = 720;
     }
   }, []);
 
@@ -108,22 +132,13 @@ export default function HeroSequence({ children }: { children?: React.ReactNode 
     const img = imagesRef.current[currentFrame];
 
     if (img && img.complete) {
-      ctx.clearRect(0, 0, 960, 540);
-      ctx.drawImage(img, 0, 0, 960, 540);
-
-      // Mask watermark
-      const gradient = ctx.createRadialGradient(910, 510, 0, 910, 510, 70);
-      gradient.addColorStop(0, 'rgba(15, 0, 0, 1)');
-      gradient.addColorStop(1, 'rgba(15, 0, 0, 0)');
-      ctx.fillStyle = gradient;
-      ctx.fillRect(800, 400, 200, 150);
+      drawFrame(img);
     }
   });
 
-  // Typography Opacity Animations (accelerated to finish before About appears)
+  // Typography Opacity Animations
   const titleOpacity = useTransform(scrollYProgress, [0, 0.15, 0.25], [1, 1, 0]);
-
-  const subOpacity = useTransform(scrollYProgress,  [0.2, 0.3, 0.5, 0.6], [0, 1, 1, 0]);
+  const subOpacity = useTransform(scrollYProgress, [0.2, 0.3, 0.5, 0.6], [0, 1, 1, 0]);
   const subY = useTransform(scrollYProgress, [0.2, 0.3], [50, 0]);
 
   return (
@@ -133,24 +148,24 @@ export default function HeroSequence({ children }: { children?: React.ReactNode 
         
         <canvas
           ref={canvasRef}
-          className="absolute inset-0 w-full h-full object-cover transition-opacity duration-1000"
-          style={{ opacity: imagesLoaded > 0 ? 1 : 0 }}
+          className="absolute inset-0 w-full h-full object-cover"
+          style={{ opacity: 0, transition: 'opacity 0.5s ease' }}
         />
         
         <div className="absolute inset-0 bg-black/50 z-10 pointer-events-none mix-blend-multiply" />
 
-        {imagesLoaded < FRAME_COUNT && imagesLoaded > 0 && (
-          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-50 w-32">
-            <div className="h-[2px] bg-neutral-800 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-neutral-500 transition-all duration-300 ease-out rounded-full"
-                style={{ width: `${Math.round((imagesLoaded / FRAME_COUNT) * 100)}%` }}
-              />
-            </div>
+        {/* Minimal progress bar */}
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-50 w-32 transition-opacity duration-500">
+          <div className="h-[2px] bg-neutral-800 rounded-full overflow-hidden">
+            <div
+              ref={progressRef}
+              className="h-full bg-neutral-500 rounded-full"
+              style={{ width: '0%', transition: 'width 0.2s ease-out' }}
+            />
           </div>
-        )}
+        </div>
 
-        {/* Text Overlays - Main title stays perfectly vertically centered while fading */}
+        {/* Text Overlays */}
         <div className="relative z-20 w-full px-6 flex flex-col items-center justify-center text-center">
           <motion.div style={{ opacity: titleOpacity }} className="absolute flex flex-col items-center">
             <h1 className="text-6xl md:text-9xl font-black text-white tracking-tighter drop-shadow-2xl uppercase">
@@ -172,7 +187,7 @@ export default function HeroSequence({ children }: { children?: React.ReactNode 
         </div>
       </div>
 
-      {/* Spacer allows time for scrolling through the hero animation BEFORE content appears */}
+      {/* Spacer for scroll animation */}
       <div className="w-full h-[300vh] relative z-10 pointer-events-none" />
 
       {/* Content extending over the hero sequence */}

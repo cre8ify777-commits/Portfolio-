@@ -1,9 +1,14 @@
+import dynamic from 'next/dynamic';
 import HeroSequence from '@/components/HeroSequence';
 import About from '@/components/About';
-import Experience from '@/components/Experience';
-import Skills from '@/components/Skills';
-import Contact from '@/components/Contact';
-import { GradientBackground } from '@/components/ui/gradient-background';
+
+// Below-fold components: lazy loaded for faster initial render
+const Experience = dynamic(() => import('@/components/Experience'));
+const Skills = dynamic(() => import('@/components/Skills'));
+const Contact = dynamic(() => import('@/components/Contact'));
+const GradientBackground = dynamic(
+  () => import('@/components/ui/gradient-background').then(m => ({ default: m.GradientBackground }))
+);
 
 export default function Home() {
   return (
